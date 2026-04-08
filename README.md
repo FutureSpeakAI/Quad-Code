@@ -80,9 +80,11 @@ quad-code https://github.com/user/repo
 
 | Flag | Description |
 |------|-------------|
-| `-n, --instances <N>` | Number of instances: 4, 8, 12, or 16 (default: 4) |
+| `-n, --instances <N>` | Number of instances: 1–16 (default: 4) |
 | `-s, --swarm` | Assign specialized roles to each instance |
+| `-b, --branches` | Each instance works on its own git branch |
 | `-p, --prompt <text>` | Send an initial prompt to all instances |
+| `--orchestrate` | Programmatic mode (used by Asimov's Mind) |
 | `-h, --help` | Show help |
 | `-v, --version` | Show version |
 

@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
 import { spawn, execSync } from 'child_process';
-import { existsSync, readdirSync, readFileSync } from 'fs';
-import { resolve, basename } from 'path';
+import { existsSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
+import { resolve, basename, join } from 'path';
 import { createInterface } from 'readline';
+import { tmpdir } from 'os';
 
 const MAX_INSTANCES = 16;
 const VERSION = '2.1.0';
@@ -51,6 +52,20 @@ const ALL_ROLES = [
   { role: 'API Documentation', focus: 'API docs, endpoint documentation, request/response examples, schemas' },
 ];
 
+// --- Cached Linux terminal detection (detect once, not per-launch) ---
+
+let _cachedLinuxTerminal = null;
+function detectLinuxTerminal() {
+  if (_cachedLinuxTerminal) return _cachedLinuxTerminal;
+  const terminals = ['gnome-terminal', 'konsole', 'xfce4-terminal', 'xterm'];
+  for (const t of terminals) {
+    try { execSync(`which ${t}`, { stdio: 'ignore' }); _cachedLinuxTerminal = t; return t; }
+    catch { continue; }
+  }
+  _cachedLinuxTerminal = 'xterm';
+  return 'xterm';
+}
+
 // --- Boot animation ---
 
 function sleep(ms) {
@@ -58,22 +73,21 @@ function sleep(ms) {
 }
 
 async function bootAnimation() {
-  const frames = [
-    `${C.dim}  Initializing Quad Code...${C.reset}`,
-    `${C.cyan}  [=                   ]${C.reset}  ${C.dim}Loading core...${C.reset}`,
-    `${C.cyan}  [====                ]${C.reset}  ${C.dim}Detecting platform...${C.reset}`,
-    `${C.cyan}  [========            ]${C.reset}  ${C.dim}Scanning for Claude CLI...${C.reset}`,
-    `${C.cyan}  [============        ]${C.reset}  ${C.dim}Preparing terminal pool...${C.reset}`,
-    `${C.cyan}  [================    ]${C.reset}  ${C.dim}Loading swarm roles...${C.reset}`,
-    `${C.cyan}  [====================]${C.reset}  ${C.green}Ready.${C.reset}`,
+  const steps = [
+    { bar: '=                   ', msg: 'Loading core...' },
+    { bar: '====                ', msg: 'Detecting platform...' },
+    { bar: '========            ', msg: 'Scanning for Claude CLI...' },
+    { bar: '============        ', msg: 'Preparing terminal pool...' },
+    { bar: '================    ', msg: 'Loading swarm roles...' },
+    { bar: '====================', msg: 'Ready.' },
   ];
 
-  process.stdout.write('\n');
-  for (const frame of frames) {
-    process.stdout.write(`\r${frame}`);
-    await sleep(200);
+  for (const step of steps) {
+    const color = step.msg === 'Ready.' ? C.green : C.dim;
+    console.log(`  ${C.cyan}[${step.bar}]${C.reset}  ${color}${step.msg}${C.reset}`);
+    await sleep(250);
   }
-  process.stdout.write('\n\n');
+  console.log('');
 }
 
 async function printLogo() {
@@ -216,22 +230,6 @@ function resolvePathOrUrl(input) {
 
 // --- Branch management ---
 
-function createBranch(repoPath, branchName) {
-  try {
-    execSync(`git -C "${repoPath}" checkout -b "${branchName}"`, { stdio: 'pipe' });
-    return true;
-  } catch {
-    // Branch might already exist
-    try {
-      execSync(`git -C "${repoPath}" checkout "${branchName}"`, { stdio: 'pipe' });
-      return true;
-    } catch (err) {
-      console.error(`${C.red}  Failed to create branch ${branchName}: ${err.message}${C.reset}`);
-      return false;
-    }
-  }
-}
-
 function getCurrentBranch(repoPath) {
   try {
     return execSync(`git -C "${repoPath}" rev-parse --abbrev-ref HEAD`, { stdio: 'pipe' }).toString().trim();
@@ -294,10 +292,11 @@ async function interactiveSetup() {
   } else if (modeChoice === '2') {
     console.log(`\n  ${C.dim}Enter project paths or GitHub URLs (one per line, empty line to finish)${C.reset}\n`);
     for (let i = 0; i < MAX_INSTANCES; i++) {
-      const input = await ask(iface, `  ${INSTANCE_COLORS[i]}[${i + 1}]${C.reset} Path or URL: `);
+      const input = await ask(iface, `  ${INSTANCE_COLORS[i % INSTANCE_COLORS.length]}[${i + 1}]${C.reset} Path or URL: `);
       if (input === '') {
         if (paths.length === 0) {
           console.error(`${C.red}  Error: You must provide at least one path.${C.reset}`);
+          iface.close();
           process.exit(1);
         }
         break;
@@ -319,8 +318,8 @@ async function interactiveSetup() {
     `  ${C.bold}How many simultaneous sessions?${C.reset} ${C.dim}(1-${maxForMode}, default ${defaultCount})${C.reset}: `
   );
   const instanceCount = countStr === '' ? defaultCount : parseInt(countStr, 10);
-  if (isNaN(instanceCount) || instanceCount < 1 || instanceCount > MAX_INSTANCES) {
-    console.error(`${C.red}  Invalid count. Must be 1-${MAX_INSTANCES}.${C.reset}`);
+  if (isNaN(instanceCount) || instanceCount < 1 || instanceCount > maxForMode) {
+    console.error(`${C.red}  Invalid count. Must be 1-${maxForMode}.${C.reset}`);
     iface.close();
     process.exit(1);
   }
@@ -401,32 +400,47 @@ function launchTerminal(index, cwd, instancePrompt, branchCmd) {
 
   let claudeCmd = 'claude --dangerously-skip-permissions';
   if (instancePrompt) {
-    const escaped = instancePrompt.replace(/"/g, '\\"').replace(/`/g, '\\`');
-    claudeCmd += ` -p "${escaped}"`;
+    // Use --append-system-prompt to inject the role while keeping Claude interactive
+    if (platform === 'win32') {
+      const escaped = instancePrompt.replace(/%/g, '%%').replace(/\^/g, '^^');
+      claudeCmd += ` --append-system-prompt "${escaped}"`;
+    } else {
+      const escaped = instancePrompt.replace(/"/g, '\\"').replace(/`/g, '\\`');
+      claudeCmd += ` --append-system-prompt "${escaped}"`;
+    }
   }
 
-  // Prepend branch checkout if needed
+  // preCmd: prepend branch creation command on macOS/Linux (Windows handles it via bat file)
   const preCmd = branchCmd ? `${branchCmd} && ` : '';
 
   if (platform === 'win32') {
     const winPath = cwd.replace(/\//g, '\\');
-    const fullCmd = `start "Quad Code - ${label}" cmd /k "cd /d "${winPath}" && title Quad Code - ${label} && ${preCmd}${claudeCmd}"`;
-    const child = spawn(fullCmd, [], { detached: true, stdio: 'ignore', shell: true });
+    // Write a temp .bat file — avoids all CMD quoting issues
+    const batWinPath = join(tmpdir(), `qc-${label}-${Date.now()}.bat`).replace(/\//g, '\\');
+    const lines = [`@echo off`, `cd /d "${winPath}"`, `title Quad Code - ${label}`];
+    if (branchCmd) lines.push(branchCmd);
+    lines.push(claudeCmd);
+    writeFileSync(batWinPath, lines.join('\r\n') + '\r\n');
+
+    // shell:true lets the host shell interpret the start command directly
+    const fullCmd = `start "" cmd /k "${batWinPath}"`;
+    const child = spawn(fullCmd, [], {
+      detached: true,
+      stdio: 'ignore',
+      shell: true,
+    });
     child.unref();
     child.on('error', (err) => {
       console.error(`${color}[${label}]${C.reset} ${C.red}Failed: ${err.message}${C.reset}`);
     });
+    // Clean up the temp .bat file after cmd.exe has had time to read it
+    setTimeout(() => { try { unlinkSync(batWinPath); } catch { /* already gone */ } }, 10000);
   } else if (platform === 'darwin') {
     const script = `tell application "Terminal" to do script "cd '${cwd}' && ${preCmd}${claudeCmd}"`;
     const child = spawn('osascript', ['-e', script], { detached: true, stdio: 'ignore' });
     child.unref();
   } else {
-    const terminals = ['gnome-terminal', 'konsole', 'xfce4-terminal', 'xterm'];
-    let terminalCmd = 'xterm';
-    for (const t of terminals) {
-      try { execSync(`which ${t}`, { stdio: 'ignore' }); terminalCmd = t; break; }
-      catch { continue; }
-    }
+    const terminalCmd = detectLinuxTerminal();
     let terminalArgs;
     const fullClaudeCmd = `${preCmd}${claudeCmd}`;
     if (terminalCmd === 'gnome-terminal') {
@@ -441,7 +455,7 @@ function launchTerminal(index, cwd, instancePrompt, branchCmd) {
   }
 }
 
-function launchAll(paths, prompt, instanceCount, swarmMode, useBranches) {
+async function launchAll(paths, prompt, instanceCount, swarmMode, useBranches) {
   let originalBranch = null;
   const repoPath = paths[0];
 
@@ -457,6 +471,9 @@ function launchAll(paths, prompt, instanceCount, swarmMode, useBranches) {
   }
 
   for (let i = 0; i < instanceCount; i++) {
+    // Stagger launches to avoid overwhelming the OS
+    if (i > 0) await sleep(600);
+
     const cwd = resolve(paths[i]);
     const color = INSTANCE_COLORS[i % INSTANCE_COLORS.length];
     const label = `Q${i + 1}`;
@@ -548,7 +565,7 @@ if (prompt) console.log(`  Prompt:     ${C.dim}${prompt}${C.reset}`);
 console.log('');
 
 // Launch
-launchAll(workingDirs, prompt, instanceCount, swarmMode, useBranches);
+await launchAll(workingDirs, prompt, instanceCount, swarmMode, useBranches);
 
 console.log(`\n${C.green}${C.bold}  All ${instanceCount} instances launched.${C.reset}`);
 console.log(`${C.dim}  Each instance runs in its own terminal window.${C.reset}`);
