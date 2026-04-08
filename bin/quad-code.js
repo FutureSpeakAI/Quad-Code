@@ -33,21 +33,93 @@ function sleep(ms) {
 }
 
 async function bootAnimation() {
-  const steps = [
-    { bar: '=                   ', msg: 'Loading core...' },
-    { bar: '====                ', msg: 'Detecting platform...' },
-    { bar: '========            ', msg: 'Scanning for Claude CLI...' },
-    { bar: '============        ', msg: 'Preparing terminal pool...' },
-    { bar: '================    ', msg: 'Loading swarm roles...' },
-    { bar: '====================', msg: 'Ready.' },
+  // Low-rider bouncing animation
+  const car = [
+    `    _______________`,
+    `   //  QUAD CODE  \\\\`,
+    `  //______________\\\\`,
+    `  |  _     _     _ |`,
+    `  | |Q| _ |Q| _ |Q||`,
+    `  | |1||_||2||_||3||`,
   ];
 
-  for (const step of steps) {
-    const color = step.msg === 'Ready.' ? C.green : C.dim;
-    console.log(`  ${C.cyan}[${step.bar}]${C.reset}  ${color}${step.msg}${C.reset}`);
-    await sleep(250);
+  const wheelSets = [
+    // Ground level (normal)
+    [
+      `  |_|=|_______|=|_|`,
+      `   (o)         (o)`,
+    ],
+    // Bounce up (rear lifts)
+    [
+      `  |_|=|_______|=|_|`,
+      `   (o)        .(o)`,
+    ],
+    // Bounce high (full hop)
+    [
+      `  |_|=|_______|=|_|`,
+      `   (o).       .(o)`,
+    ],
+    // Left tilt
+    [
+      `  |_|=|_______|=|_|`,
+      `  .(o)         (o)`,
+    ],
+    // Ground level
+    [
+      `  |_|=|_______|=|_|`,
+      `   (o)         (o)`,
+    ],
+  ];
+
+  const messages = [
+    'Loading core...',
+    'Detecting platform...',
+    'Scanning for Claude CLI...',
+    'Preparing terminal pool...',
+    'Ready to roll.',
+  ];
+
+  const clearLines = (n) => {
+    for (let i = 0; i < n; i++) {
+      process.stdout.write('\x1b[1A\x1b[2K');
+    }
+  };
+
+  // Print initial car
+  const totalLines = car.length + 2 + 1; // car + wheels + message
+  for (const line of car) {
+    console.log(`${C.cyan}${line}${C.reset}`);
   }
+  console.log(`${C.cyan}${wheelSets[0][0]}${C.reset}`);
+  console.log(`${C.cyan}${wheelSets[0][1]}${C.reset}`);
+  console.log(`  ${C.dim}${messages[0]}${C.reset}`);
+  await sleep(400);
+
+  // Bounce sequence
+  for (let i = 1; i < wheelSets.length; i++) {
+    clearLines(totalLines);
+    const pad = (i === 2) ? '\n' : ''; // extra line for "hop" frame
+    if (i === 2) {
+      // Full hop — shift car up one line
+      console.log('');
+    }
+    for (const line of car) {
+      console.log(`${C.cyan}${line}${C.reset}`);
+    }
+    console.log(`${C.cyan}${wheelSets[i][0]}${C.reset}`);
+    console.log(`${C.cyan}${wheelSets[i][1]}${C.reset}`);
+    const msgColor = i === wheelSets.length - 1 ? C.green : C.dim;
+    console.log(`  ${msgColor}${messages[i]}${C.reset}`);
+    await sleep(350);
+  }
+
+  // Tagline
+  await sleep(200);
   console.log('');
+  console.log(`  ${C.dim}We heard you like to code while you code...${C.reset}`);
+  console.log(`  ${C.dim}so we made ${C.bold}Quad Code${C.reset}${C.dim} for ${C.bold}Claude Code${C.reset}${C.dim}.${C.reset}`);
+  console.log('');
+  await sleep(600);
 }
 
 async function printLogo() {
