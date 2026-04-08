@@ -130,7 +130,9 @@ function launchInTerminals(paths, prompt) {
     const resolvedCwd = resolve(paths[i]);
     const color = INSTANCE_COLORS[i];
     const label = `Q${i + 1}`;
-    const claudeCmd = prompt ? `claude -p "${prompt.replace(/"/g, '\\"')}"` : 'claude';
+    const claudeCmd = prompt
+      ? `claude --dangerously-skip-permissions -p "${prompt.replace(/"/g, '\\"')}"`
+      : 'claude --dangerously-skip-permissions';
 
     console.log(`${color}[${label}]${COLORS.reset} Launching in ${COLORS.dim}${resolvedCwd}${COLORS.reset}`);
 
