@@ -121,11 +121,23 @@ function cloneRepo(url) {
   }
 }
 
+function normalizePath(inputPath) {
+  // Convert Git Bash-style paths (/c/Users/...) to Windows paths (C:\Users\...)
+  if (process.platform === 'win32') {
+    const match = inputPath.match(/^\/([a-zA-Z])\/(.*)/);
+    if (match) {
+      return `${match[1].toUpperCase()}:\\${match[2].replace(/\//g, '\\')}`;
+    }
+  }
+  return inputPath;
+}
+
 function resolvePathOrUrl(input) {
   if (isGitHubUrl(input)) {
     return cloneRepo(input);
   }
-  const resolved = resolve(input);
+  const normalized = normalizePath(input);
+  const resolved = resolve(normalized);
   if (!existsSync(resolved)) {
     console.error(`${COLORS.red}Error: Path does not exist: ${resolved}${COLORS.reset}`);
     process.exit(1);
@@ -215,8 +227,21 @@ function launchInTerminals(paths, prompt) {
     let terminalArgs;
 
     if (platform === 'win32') {
-      terminalCmd = 'cmd.exe';
-      terminalArgs = ['/c', 'start', `Quad Code - ${label}`, 'cmd', '/k', `cd /d "${resolvedCwd}" && title Quad Code - ${label} && ${claudeCmd}`];
+      // On Windows, spawn the full command via shell so quoting works correctly.
+      // `start` requires the title in double quotes when it contains spaces.
+      const winPath = resolvedCwd.replace(/\//g, '\\');
+      const fullCmd = `start "Quad Code - ${label}" cmd /k "cd /d "${winPath}" && title Quad Code - ${label} && ${claudeCmd}"`;
+
+      const child = spawn(fullCmd, [], {
+        detached: true,
+        stdio: 'ignore',
+        shell: true,
+      });
+      child.unref();
+      child.on('error', (err) => {
+        console.error(`${color}[${label}]${COLORS.reset} ${COLORS.red}Failed: ${err.message}${COLORS.reset}`);
+      });
+      continue;
     } else if (platform === 'darwin') {
       const script = `tell application "Terminal" to do script "cd '${resolvedCwd}' && ${claudeCmd}"`;
       terminalCmd = 'osascript';
