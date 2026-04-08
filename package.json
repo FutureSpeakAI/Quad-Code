@@ -1,0 +1,25 @@
+{
+  "name": "quad-code",
+  "version": "1.0.0",
+  "description": "Launch four simultaneous instances of Claude Code on one or multiple repos",
+  "author": "FutureSpeak.AI",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "quad-code": "./bin/quad-code.js"
+  },
+  "scripts": {
+    "start": "node bin/quad-code.js"
+  },
+  "keywords": [
+    "claude-code",
+    "parallel",
+    "multi-instance",
+    "ai",
+    "coding-assistant"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FutureSpeakAI/Quad-Code.git"
+  }
+}
