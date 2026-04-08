@@ -13,6 +13,12 @@
 
 **Launch up to 16 parallel Claude Code instances from a single command.** Each instance runs in its own terminal window with its own full context window. Assign specialized roles. Deploy governed AI agent swarms. Play radio while your agents work.
 
+<p align="center">
+  <img src="assets/quad-code-meme.png" alt="We heard you like to code while you code, so we made Quad Code for Claude Code, so you can code while you code while you code while you code." width="500">
+  <br>
+  <em>Get it: <code>npm install -g quad-code</code></em>
+</p>
+
 ---
 
 ## Standalone vs. Asimov's Mind
@@ -32,10 +38,13 @@ Quad Code is powerful on its own. With [Asimov's Mind](https://github.com/Future
 | Deploy from swarm | - | `/quad-deploy` skill |
 | Protected zones | - | Hook-enforced, structural |
 | Trust scoring | - | Vault-aware agent trust |
+| Auto-install | - | Offered on first run |
 
 **Standalone** gives you four simultaneous Claude Code sessions — great for working across a frontend, backend, API, and infra repo at the same time, or splitting a single repo into four parallel workstreams on separate branches.
 
 **Asimov's Mind** unlocks the full swarm. Sixteen Agent Friday instances, each with a specialized role, governed by Asimov's cLaws, federated under your GitHub org, with radio playing while they work. This is not four terminals with Claude in them. This is a coordinated AI workforce.
+
+> Don't have Asimov's Mind? No problem — Quad Code will detect that and offer to install it for you on first run.
 
 ---
 
@@ -47,7 +56,7 @@ npm install -g quad-code
 
 **Prerequisite:** [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) must be installed and authenticated.
 
-**For full power:** Install [Asimov's Mind](https://github.com/FutureSpeakAI/Agent-Friday) (Agent Friday) as a Claude Code plugin.
+**For full power:** Install [Asimov's Mind](https://github.com/FutureSpeakAI/Agent-Friday) (Agent Friday) as a Claude Code plugin — or let Quad Code install it for you when you choose Asimov mode.
 
 ---
 
@@ -89,10 +98,23 @@ Just run `quad-code` with no arguments:
 ```
 $ quad-code
 
-  ██████╗ ██╗   ██╗ █████╗ ██████╗  ...
-  ...
+   ██████╗ ██╗   ██╗ █████╗ ██████╗  ...
 
-  [====================]  Ready.
+              ______________________
+             /  Q U A D  C O D E   /|
+           _/____________________/  |
+          | ___    ___    ___   |    |
+          ||Q1 |  |Q2 |  |Q3 | |   /
+          ||___|  |___|  |___| |  /
+       __ |____________________|/  __
+      /  \=====            =====/  \
+     | (o) |                   | (o) |
+      \__/                      \__/
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  Ready to roll.
+
+  We heard you like to code while you code...
+  so we made Quad Code for Claude Code.
 
   What would you like to work on?
     [1] A single project
@@ -101,15 +123,15 @@ $ quad-code
 
   Project path or GitHub URL: ~/projects/my-app
 
-  How many simultaneous sessions? (1-4, default 4): 4
-
-  Give each instance its own branch? (y/N): y
-
   Agent mode:
     [1] Plain Claude Code (no roles)
     [2] Swarm roles (specialized focus per instance)
     [3] Asimov's Mind agents with radio
   Choose (1, 2, or 3): 3
+
+  How many simultaneous sessions? (1-16, default 4): 8
+
+  Give each instance its own branch? (y/N): y
 
   Initial prompt for all instances: Fix all failing tests
 ```
@@ -134,6 +156,12 @@ quad-code [options] [paths...]
 | `-v, --version` | Show version |
 
 Paths can be local directories or GitHub URLs. GitHub URLs are automatically cloned.
+
+---
+
+## The Boot Sequence
+
+Quad Code launches with an animated low-rider that bounces through 8 frames — front lift, rear lift, full hop, two-wheel rides on each side, slam down with sparks, and settles with "Ready to roll." Because if you're going to launch a swarm, you should look good doing it.
 
 ---
 
@@ -164,15 +192,15 @@ When you run `quad-code -n 8 -a -b .`, here's what happens:
 ```
   FEDERATION  All repos belong to FutureSpeakAI — federation ready
 
-  [Q1] C:\Users\you\Projects\my-app
+  [Q1] ~/my-app
        Agent: Atlas (Research Director)
        Focus: Lead Architect
        Radio: focused
-  [Q2] C:\Users\you\Projects\my-app
+  [Q2] ~/my-app
        Agent: Nova (Creative Strategist)
        Focus: Security Auditor
        Radio: energetic
-  [Q3] C:\Users\you\Projects\my-app
+  [Q3] ~/my-app
        Agent: Cipher (Technical Lead)
        Focus: Test Engineer
        Radio: intense
@@ -190,6 +218,21 @@ Each terminal window contains a fully interactive Claude Code session where the 
 4. **Has radio playing** — musical memory matched to its vibe (focused, energetic, intense, calm, upbeat)
 5. **Works on its own branch** — no merge conflicts between agents
 6. **Is federated** — shares governance with all other agents under your GitHub org
+
+### Asimov's Mind Auto-Install
+
+If you choose Asimov mode and the plugin isn't installed, Quad Code offers to install it for you:
+
+```
+  Asimov's Mind is not installed.
+  It adds: 16 agents, federation, radio, Asimov's cLaws, trust scoring.
+
+  Install Asimov's Mind now? (Y/n): y
+  Installing Asimov's Mind plugin...
+  Asimov's Mind installed successfully.
+```
+
+No hunting for install instructions. One prompt and you're in.
 
 ### After the Swarm Finishes
 
@@ -224,7 +267,7 @@ This is equivalent to `quad-code -n 8 -a -b . -p "Prepare for production release
                                   |
               +-------------------+-------------------+
               |         |         |         |         |
-         +----v---+ +---v----+ +-v------+ +v-------+ ...
+         +----v---+ +---v----+ +-v------+ +v-------+ ...up to 16
          | Term 1 | | Term 2 | | Term 3 | | Term 4 |
          | Atlas  | | Nova   | | Cipher | | Atlas  |
          | Arch.  | | Secur. | | Test   | | Optim. |
@@ -263,6 +306,8 @@ Combined with Asimov's Mind governance (cLaws, federation, protected zones, trus
 **Standalone Quad Code** is a fast, useful tool for anyone who wants four Claude Code sessions at once.
 
 **Quad Code + Asimov's Mind** is a governed swarm intelligence platform.
+
+We heard you like to code while you code. So we made Quad Code for Claude Code. So you can code while you code while you code while you code.
 
 The choice is yours. The ceiling is ours to remove.
 
