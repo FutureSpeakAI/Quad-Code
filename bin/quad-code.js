@@ -33,50 +33,145 @@ function sleep(ms) {
 }
 
 async function bootAnimation() {
-  // Low-rider bouncing animation
-  const car = [
-    `    _______________`,
-    `   //  QUAD CODE  \\\\`,
-    `  //______________\\\\`,
-    `  |  _     _     _ |`,
-    `  | |Q| _ |Q| _ |Q||`,
-    `  | |1||_||2||_||3||`,
-  ];
+  // Low-rider bouncing animation — 8 frames
 
-  const wheelSets = [
-    // Ground level (normal)
-    [
-      `  |_|=|_______|=|_|`,
-      `   (o)         (o)`,
-    ],
-    // Bounce up (rear lifts)
-    [
-      `  |_|=|_______|=|_|`,
-      `   (o)        .(o)`,
-    ],
-    // Bounce high (full hop)
-    [
-      `  |_|=|_______|=|_|`,
-      `   (o).       .(o)`,
-    ],
-    // Left tilt
-    [
-      `  |_|=|_______|=|_|`,
-      `  .(o)         (o)`,
-    ],
-    // Ground level
-    [
-      `  |_|=|_______|=|_|`,
-      `   (o)         (o)`,
-    ],
-  ];
-
-  const messages = [
-    'Loading core...',
-    'Detecting platform...',
-    'Scanning for Claude CLI...',
-    'Preparing terminal pool...',
-    'Ready to roll.',
+  const frames = [
+    // Frame 0: Cruising (all wheels down)
+    {
+      art: [
+        `              ______________________`,
+        `             /  Q U A D  C O D E   /|`,
+        `           _/____________________/  |`,
+        `          | ___    ___    ___   |    |`,
+        `          ||Q1 |  |Q2 |  |Q3 | |   /`,
+        `          ||___|  |___|  |___| |  /`,
+        `       __ |____________________|/`,
+        `      /  \\=====            =====/  \\`,
+        `     | (o) |                   | (o) |`,
+        `      \\__/                      \\__/`,
+        `  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~`,
+      ],
+      msg: 'Cruisin...',
+    },
+    // Frame 1: Front lifts
+    {
+      art: [
+        ``,
+        `              ______________________`,
+        `             /  Q U A D  C O D E   /|`,
+        `           _/____________________/  |`,
+        `          | ___    ___    ___   |    |`,
+        `         .||Q1 |  |Q2 |  |Q3 | |   /`,
+        `        . ||___|  |___|  |___| |  /`,
+        `       /  |____________________|/`,
+        `      | (o) |              =====/  \\`,
+        `       \\__/                | (o) |`,
+        `  ~~~~~~~~~~~~~~~~~~~~~~~~~~\\__/~~~~~~~~~`,
+      ],
+      msg: 'Loading core...',
+    },
+    // Frame 2: Back down, rear lifts
+    {
+      art: [
+        `                                        `,
+        `              ______________________`,
+        `             /  Q U A D  C O D E   /|`,
+        `           _/____________________/  |`,
+        `          | ___    ___    ___   |    |.`,
+        `          ||Q1 |  |Q2 |  |Q3 | |   / .`,
+        `          ||___|  |___|  |___| |  /  /`,
+        `       __ |____________________|/   /`,
+        `      /  \\=====              | (o) |`,
+        `     | (o) |                  \\__/`,
+        `  ~~~~\\__/~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~`,
+      ],
+      msg: 'Detecting platform...',
+    },
+    // Frame 3: Full hop — both wheels off ground
+    {
+      art: [
+        `              ______________________`,
+        `             /  Q U A D  C O D E   /|`,
+        `           _/____________________/  |`,
+        `          | ___    ___    ___   |    |`,
+        `          ||Q1 |  |Q2 |  |Q3 | |   /`,
+        `          ||___|  |___|  |___| |  /`,
+        `       __ |____________________|/  __`,
+        `      /  \\=====            =====/  \\`,
+        `     | (o) |                   | (o) |`,
+        `      \\__/                      \\__/`,
+        `  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~`,
+      ],
+      msg: 'Scanning for Claude CLI...',
+    },
+    // Frame 4: Two wheels — riding on right side
+    {
+      art: [
+        ``,
+        `            ______________________`,
+        `           /  Q U A D  C O D E   /|`,
+        `         _/____________________/  |`,
+        `        | ___    ___    ___   |    |`,
+        `        ||Q1 |  |Q2 |  |Q3 | |   /`,
+        `        ||___|  |___|  |___| |  /`,
+        `     __ |____________________|/`,
+        `        =====            =====/  \\`,
+        `                             | (o) |`,
+        `  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~\\__/~~~~~~~`,
+      ],
+      msg: 'Preparing terminal pool...',
+    },
+    // Frame 5: Two wheels — riding on left side
+    {
+      art: [
+        ``,
+        `                ______________________`,
+        `               /  Q U A D  C O D E   /|`,
+        `             _/____________________/  |`,
+        `            | ___    ___    ___   |    |`,
+        `            ||Q1 |  |Q2 |  |Q3 | |   /`,
+        `            ||___|  |___|  |___| |  /`,
+        `            |____________________|/  __`,
+        `       /  \\=====            =====`,
+        `      | (o) |`,
+        `  ~~~~~\\__/~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~`,
+      ],
+      msg: 'Loading swarm roles...',
+    },
+    // Frame 6: Slam back down (bounce)
+    {
+      art: [
+        `              ______________________`,
+        `             /  Q U A D  C O D E   /|`,
+        `           _/____________________/  |`,
+        `          | ___    ___    ___   |    |`,
+        `          ||Q1 |  |Q2 |  |Q3 | |   /`,
+        `          ||___|  |___|  |___| |  /`,
+        `       __ |____________________|/  __`,
+        `      /  \\=====            =====/  \\`,
+        `     | (o) |                   | (o) |`,
+        `      \\__/ * * * * * * * * * *  \\__/`,
+        `  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~`,
+      ],
+      msg: 'Activating swarm...',
+    },
+    // Frame 7: Settled, ready
+    {
+      art: [
+        `              ______________________`,
+        `             /  Q U A D  C O D E   /|`,
+        `           _/____________________/  |`,
+        `          | ___    ___    ___   |    |`,
+        `          ||Q1 |  |Q2 |  |Q3 | |   /`,
+        `          ||___|  |___|  |___| |  /`,
+        `       __ |____________________|/  __`,
+        `      /  \\=====            =====/  \\`,
+        `     | (o) |                   | (o) |`,
+        `      \\__/                      \\__/`,
+        `  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~`,
+      ],
+      msg: 'Ready to roll.',
+    },
   ];
 
   const clearLines = (n) => {
@@ -85,32 +180,24 @@ async function bootAnimation() {
     }
   };
 
-  // Print initial car
-  const totalLines = car.length + 2 + 1; // car + wheels + message
-  for (const line of car) {
+  const lineCount = frames[0].art.length + 1; // art lines + message line
+
+  // Draw first frame
+  for (const line of frames[0].art) {
     console.log(`${C.cyan}${line}${C.reset}`);
   }
-  console.log(`${C.cyan}${wheelSets[0][0]}${C.reset}`);
-  console.log(`${C.cyan}${wheelSets[0][1]}${C.reset}`);
-  console.log(`  ${C.dim}${messages[0]}${C.reset}`);
-  await sleep(400);
+  console.log(`  ${C.dim}${frames[0].msg}${C.reset}`);
+  await sleep(500);
 
-  // Bounce sequence
-  for (let i = 1; i < wheelSets.length; i++) {
-    clearLines(totalLines);
-    const pad = (i === 2) ? '\n' : ''; // extra line for "hop" frame
-    if (i === 2) {
-      // Full hop — shift car up one line
-      console.log('');
-    }
-    for (const line of car) {
+  // Animate through remaining frames
+  for (let i = 1; i < frames.length; i++) {
+    clearLines(lineCount);
+    for (const line of frames[i].art) {
       console.log(`${C.cyan}${line}${C.reset}`);
     }
-    console.log(`${C.cyan}${wheelSets[i][0]}${C.reset}`);
-    console.log(`${C.cyan}${wheelSets[i][1]}${C.reset}`);
-    const msgColor = i === wheelSets.length - 1 ? C.green : C.dim;
-    console.log(`  ${msgColor}${messages[i]}${C.reset}`);
-    await sleep(350);
+    const msgColor = i === frames.length - 1 ? C.green : C.dim;
+    console.log(`  ${msgColor}${frames[i].msg}${C.reset}`);
+    await sleep(i === frames.length - 1 ? 400 : 350);
   }
 
   // Tagline
@@ -119,7 +206,7 @@ async function bootAnimation() {
   console.log(`  ${C.dim}We heard you like to code while you code...${C.reset}`);
   console.log(`  ${C.dim}so we made ${C.bold}Quad Code${C.reset}${C.dim} for ${C.bold}Claude Code${C.reset}${C.dim}.${C.reset}`);
   console.log('');
-  await sleep(600);
+  await sleep(500);
 }
 
 async function printLogo() {
