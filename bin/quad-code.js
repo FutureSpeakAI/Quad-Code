@@ -26,6 +26,53 @@ function detectLinuxTerminal() {
   return 'xterm';
 }
 
+// --- Asimov's Mind detection ---
+
+function isAsimovInstalled() {
+  try {
+    // Check for the plugin in Claude Code's plugin cache
+    const pluginDir = join(
+      process.env.HOME || process.env.USERPROFILE || '',
+      '.claude', 'plugins', 'cache', 'asimovs-mind-marketplace', 'asimovs-mind'
+    );
+    return existsSync(pluginDir);
+  } catch {
+    return false;
+  }
+}
+
+async function offerAsimovInstall(iface) {
+  console.log('');
+  console.log(`  ${C.magenta}${C.bold}Asimov's Mind is not installed.${C.reset}`);
+  console.log(`  ${C.dim}It adds: 16 agents, federation, radio, Asimov's cLaws, trust scoring.${C.reset}`);
+  console.log('');
+
+  const choice = await ask(
+    iface,
+    `  ${C.bold}Install Asimov's Mind now?${C.reset} ${C.dim}(Y/n)${C.reset}: `
+  );
+
+  if (choice.toLowerCase() !== 'n') {
+    console.log('');
+    console.log(`  ${C.cyan}Installing Asimov's Mind plugin...${C.reset}`);
+    try {
+      execSync('claude plugins install asimovs-mind', { stdio: 'inherit' });
+      console.log(`  ${C.green}${C.bold}Asimov's Mind installed successfully.${C.reset}`);
+      console.log('');
+      return true;
+    } catch {
+      console.log('');
+      console.log(`  ${C.yellow}Automatic install didn't work. Install manually:${C.reset}`);
+      console.log(`  ${C.dim}1. Open Claude Code: ${C.bold}claude${C.reset}`);
+      console.log(`  ${C.dim}2. Run: ${C.bold}/install-plugin asimovs-mind${C.reset}`);
+      console.log(`  ${C.dim}Or visit: ${C.cyan}https://github.com/FutureSpeakAI/Agent-Friday${C.reset}`);
+      console.log('');
+      return false;
+    }
+  }
+  return false;
+}
+
 // --- Boot animation ---
 
 function sleep(ms) {
@@ -388,7 +435,16 @@ async function interactiveSetup() {
     `  ${C.bold}Agent mode:${C.reset}\n  ${C.cyan}[1]${C.reset} Plain Claude Code (no roles)\n  ${C.cyan}[2]${C.reset} Swarm roles (specialized focus per instance)\n  ${C.cyan}[3]${C.reset} ${C.magenta}Asimov's Mind${C.reset} agents with radio ${C.dim}(requires Asimov's Mind plugin)${C.reset}\n\n  ${C.bold}Choose (1, 2, or 3, default 1): ${C.reset}`
   );
   const swarm = agentChoice === '2';
-  const asimov = agentChoice === '3';
+  let asimov = agentChoice === '3';
+
+  // If user chose Asimov but it's not installed, offer to install
+  if (asimov && !isAsimovInstalled()) {
+    const installed = await offerAsimovInstall(iface);
+    if (!installed) {
+      console.log(`  ${C.yellow}Continuing in swarm mode (specialized roles without Asimov agents).${C.reset}`);
+      asimov = false;
+    }
+  }
 
   // Step 3: How many instances?
   // Standalone (plain/swarm): max 4. Asimov's Mind: max 16.
@@ -605,6 +661,13 @@ if (opts.paths.length === 0 && !opts.orchestrate) {
   swarmMode = opts.swarm;
   asimovMode = opts.asimov;
   useBranches = opts.branches;
+
+  // If --asimov but plugin not installed, warn
+  if (asimovMode && !isAsimovInstalled()) {
+    console.log(`${C.yellow}${C.bold}  Asimov's Mind plugin not detected.${C.reset}`);
+    console.log(`${C.dim}  Agents will run with Asimov prompts but without MCP tools (radio, memory, trust).${C.reset}`);
+    console.log(`${C.dim}  Install: ${C.cyan}https://github.com/FutureSpeakAI/Agent-Friday${C.reset}\n`);
+  }
 
   // Enforce standalone cap: max 4 without --asimov
   const STANDALONE_MAX = 4;
