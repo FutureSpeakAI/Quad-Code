@@ -222,10 +222,25 @@ async function interactiveSetup() {
     process.exit(1);
   }
 
-  // Step 2: How many instances?
-  const maxForMode = singleRepo ? MAX_INSTANCES : paths.length;
-  const defaultCount = singleRepo ? 4 : paths.length;
+  // Step 2: Agent mode? (asked before count so we know the cap)
   console.log('');
+  const agentChoice = await ask(
+    iface,
+    `  ${C.bold}Agent mode:${C.reset}\n  ${C.cyan}[1]${C.reset} Plain Claude Code (no roles)\n  ${C.cyan}[2]${C.reset} Swarm roles (specialized focus per instance)\n  ${C.cyan}[3]${C.reset} ${C.magenta}Asimov's Mind${C.reset} agents with radio ${C.dim}(requires Asimov's Mind plugin)${C.reset}\n\n  ${C.bold}Choose (1, 2, or 3, default 1): ${C.reset}`
+  );
+  const swarm = agentChoice === '2';
+  const asimov = agentChoice === '3';
+
+  // Step 3: How many instances?
+  // Standalone (plain/swarm): max 4. Asimov's Mind: max 16.
+  const STANDALONE_MAX = 4;
+  const cap = asimov ? MAX_INSTANCES : STANDALONE_MAX;
+  const maxForMode = singleRepo ? cap : Math.min(paths.length, cap);
+  const defaultCount = singleRepo ? Math.min(4, cap) : Math.min(paths.length, cap);
+  console.log('');
+  if (!asimov && singleRepo) {
+    console.log(`  ${C.dim}Standalone mode: max ${STANDALONE_MAX} sessions. Install Asimov's Mind for up to 16.${C.reset}`);
+  }
   const countStr = await ask(
     iface,
     `  ${C.bold}How many simultaneous sessions?${C.reset} ${C.dim}(1-${maxForMode}, default ${defaultCount})${C.reset}: `
@@ -233,6 +248,9 @@ async function interactiveSetup() {
   const instanceCount = countStr === '' ? defaultCount : parseInt(countStr, 10);
   if (isNaN(instanceCount) || instanceCount < 1 || instanceCount > maxForMode) {
     console.error(`${C.red}  Invalid count. Must be 1-${maxForMode}.${C.reset}`);
+    if (!asimov && instanceCount > STANDALONE_MAX) {
+      console.error(`${C.magenta}  Unlock up to 16 sessions with Asimov's Mind: https://github.com/FutureSpeakAI/Agent-Friday${C.reset}`);
+    }
     iface.close();
     process.exit(1);
   }
@@ -247,7 +265,7 @@ async function interactiveSetup() {
     paths = paths.slice(0, instanceCount);
   }
 
-  // Step 3: Branches? (only for single repo)
+  // Step 4: Branches? (only for single repo)
   let useBranches = false;
   if (singleRepo && instanceCount > 1) {
     console.log('');
@@ -257,15 +275,6 @@ async function interactiveSetup() {
     );
     useBranches = branchChoice.toLowerCase() === 'y';
   }
-
-  // Step 4: Agent mode?
-  console.log('');
-  const agentChoice = await ask(
-    iface,
-    `  ${C.bold}Agent mode:${C.reset}\n  ${C.cyan}[1]${C.reset} Plain Claude Code (no roles)\n  ${C.cyan}[2]${C.reset} Swarm roles (specialized focus per instance)\n  ${C.cyan}[3]${C.reset} ${C.magenta}Asimov's Mind${C.reset} agents with radio ${C.dim}(requires Asimov's Mind plugin)${C.reset}\n\n  ${C.bold}Choose (1, 2, or 3, default 1): ${C.reset}`
-  );
-  const swarm = agentChoice === '2';
-  const asimov = agentChoice === '3';
 
   // Step 5: Custom prompt?
   console.log('');
@@ -437,6 +446,14 @@ if (opts.paths.length === 0 && !opts.orchestrate) {
   swarmMode = opts.swarm;
   asimovMode = opts.asimov;
   useBranches = opts.branches;
+
+  // Enforce standalone cap: max 4 without --asimov
+  const STANDALONE_MAX = 4;
+  if (!asimovMode && instanceCount > STANDALONE_MAX) {
+    console.log(`${C.yellow}${C.bold}  Standalone mode is limited to ${STANDALONE_MAX} sessions.${C.reset}`);
+    console.log(`${C.magenta}  Unlock up to 16 with --asimov: https://github.com/FutureSpeakAI/Agent-Friday${C.reset}\n`);
+    instanceCount = STANDALONE_MAX;
+  }
 
   if (resolvedPaths.length <= 1) {
     const dir = resolvedPaths[0] || process.cwd();
