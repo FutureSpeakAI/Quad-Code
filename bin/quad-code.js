@@ -1,56 +1,16 @@
 #!/usr/bin/env node
 
 import { spawn, execSync } from 'child_process';
-import { existsSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
+import { existsSync, writeFileSync, unlinkSync } from 'fs';
 import { resolve, basename, join } from 'path';
 import { createInterface } from 'readline';
 import { tmpdir } from 'os';
+import {
+  MAX_INSTANCES, VERSION, C, INSTANCE_COLORS, ALL_ROLES, ASIMOV_AGENTS,
+  isGitHubUrl, normalizePath, parseArgs, buildInstancePrompt,
+} from '../lib/core.js';
 
-const MAX_INSTANCES = 16;
-const VERSION = '2.1.0';
-
-const C = {
-  reset: '\x1b[0m',
-  bold: '\x1b[1m',
-  dim: '\x1b[2m',
-  red: '\x1b[31m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  blue: '\x1b[34m',
-  magenta: '\x1b[35m',
-  cyan: '\x1b[36m',
-  white: '\x1b[37m',
-  bgCyan: '\x1b[46m',
-  bgBlue: '\x1b[44m',
-  bgMagenta: '\x1b[45m',
-};
-
-const INSTANCE_COLORS = [
-  C.cyan, C.green, C.yellow, C.magenta,
-  C.blue, C.red, C.white, C.cyan,
-  C.green, C.yellow, C.magenta, C.blue,
-  C.red, C.white, C.cyan, C.green,
-];
-
-// --- Swarm role database (scales dynamically to any count 1-16) ---
-const ALL_ROLES = [
-  { role: 'Lead Architect', focus: 'Architecture review, dependency analysis, module boundaries, design patterns' },
-  { role: 'Security Auditor', focus: 'Security vulnerabilities, OWASP top 10, injection risks, auth/authz' },
-  { role: 'Test Engineer', focus: 'Test coverage gaps, missing edge cases, flaky tests, test quality' },
-  { role: 'Optimizer', focus: 'Performance bottlenecks, memory leaks, algorithmic complexity, bundle size' },
-  { role: 'Code Reviewer', focus: 'Code quality, DRY violations, naming conventions, dead code, code smells' },
-  { role: 'Documentation', focus: 'Missing docs, outdated README, inline comments, API documentation' },
-  { role: 'Type Safety', focus: 'Type errors, any types, missing annotations, type soundness, strict mode' },
-  { role: 'Dependency Auditor', focus: 'Outdated deps, CVE scan, license compliance, unused packages' },
-  { role: 'Integration Tester', focus: 'Integration tests, E2E tests, API contract tests, cross-module tests' },
-  { role: 'Memory Analyst', focus: 'Memory leaks, resource cleanup, event listener cleanup, GC pressure' },
-  { role: 'Error Handling', focus: 'Missing error handling, uncaught promises, error boundaries, recovery' },
-  { role: 'Accessibility', focus: 'WCAG compliance, screen reader support, keyboard navigation, contrast' },
-  { role: 'Secrets Scanner', focus: 'Hardcoded secrets, API keys, tokens, credentials in code or config' },
-  { role: 'Dead Code Hunter', focus: 'Unused exports, unreachable code, unused dependencies, orphan files' },
-  { role: 'Bundle Optimizer', focus: 'Bundle size, tree shaking, code splitting, lazy loading, chunk analysis' },
-  { role: 'API Documentation', focus: 'API docs, endpoint documentation, request/response examples, schemas' },
-];
+// --- Swarm role database lives in lib/core.js ---
 
 // --- Cached Linux terminal detection (detect once, not per-launch) ---
 
@@ -130,48 +90,13 @@ function printUsage() {
   ${C.bold}Options:${C.reset}
     -n, --instances <N>    Number of instances: 1-16 (default: 4)
     -s, --swarm            Assign specialized roles to each instance
+    -a, --asimov           Deploy as Asimov's Mind agents with radio
     -b, --branches         Each instance works on its own branch
     -p, --prompt <text>    Send an initial prompt to all instances
     --orchestrate          Programmatic mode (used by Asimov's Mind)
     -h, --help             Show this help message
     -v, --version          Show version
 `);
-}
-
-function parseArgs(argv) {
-  const args = argv.slice(2);
-  const result = {
-    paths: [],
-    prompt: null,
-    help: false,
-    version: false,
-    instances: 4,
-    swarm: false,
-    branches: false,
-    orchestrate: false,
-  };
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === '-h' || arg === '--help') result.help = true;
-    else if (arg === '-v' || arg === '--version') result.version = true;
-    else if (arg === '-s' || arg === '--swarm') result.swarm = true;
-    else if (arg === '-b' || arg === '--branches') result.branches = true;
-    else if (arg === '--orchestrate') result.orchestrate = true;
-    else if (arg === '-p' || arg === '--prompt') result.prompt = args[++i];
-    else if (arg === '-n' || arg === '--instances') {
-      const n = parseInt(args[++i], 10);
-      if (isNaN(n) || n < 1 || n > MAX_INSTANCES) {
-        console.error(`${C.red}Error: Instance count must be 1-16. Got: ${args[i]}${C.reset}`);
-        process.exit(1);
-      }
-      result.instances = n;
-    } else if (!arg.startsWith('-')) {
-      result.paths.push(arg);
-    }
-  }
-
-  return result;
 }
 
 // --- Helpers ---
@@ -184,10 +109,6 @@ function ask(iface, question) {
   return new Promise((res) => {
     iface.question(question, (answer) => res(answer.trim()));
   });
-}
-
-function isGitHubUrl(str) {
-  return /^https?:\/\/(www\.)?github\.com\//.test(str) || /^git@github\.com:/.test(str);
 }
 
 function cloneRepo(url) {
@@ -208,14 +129,6 @@ function cloneRepo(url) {
     console.error(`${C.red}  Failed to clone: ${err.message}${C.reset}`);
     process.exit(1);
   }
-}
-
-function normalizePath(inputPath) {
-  if (process.platform === 'win32') {
-    const match = inputPath.match(/^\/([a-zA-Z])\/(.*)/);
-    if (match) return `${match[1].toUpperCase()}:\\${match[2].replace(/\//g, '\\')}`;
-  }
-  return inputPath;
 }
 
 function resolvePathOrUrl(input) {
@@ -345,13 +258,14 @@ async function interactiveSetup() {
     useBranches = branchChoice.toLowerCase() === 'y';
   }
 
-  // Step 4: Swarm roles?
+  // Step 4: Agent mode?
   console.log('');
-  const swarmChoice = await ask(
+  const agentChoice = await ask(
     iface,
-    `  ${C.bold}Assign specialized roles to each instance?${C.reset} ${C.dim}(y/N)${C.reset}: `
+    `  ${C.bold}Agent mode:${C.reset}\n  ${C.cyan}[1]${C.reset} Plain Claude Code (no roles)\n  ${C.cyan}[2]${C.reset} Swarm roles (specialized focus per instance)\n  ${C.cyan}[3]${C.reset} ${C.magenta}Asimov's Mind${C.reset} agents with radio ${C.dim}(requires Asimov's Mind plugin)${C.reset}\n\n  ${C.bold}Choose (1, 2, or 3, default 1): ${C.reset}`
   );
-  const swarm = swarmChoice.toLowerCase() === 'y';
+  const swarm = agentChoice === '2';
+  const asimov = agentChoice === '3';
 
   // Step 5: Custom prompt?
   console.log('');
@@ -361,34 +275,7 @@ async function interactiveSetup() {
   );
 
   iface.close();
-  return { paths, prompt: prompt || null, instances: instanceCount, swarm, branches: useBranches };
-}
-
-// --- Prompt generation ---
-
-function buildInstancePrompt(index, totalCount, basePrompt, swarmMode, branchName) {
-  const parts = [];
-
-  if (swarmMode) {
-    const role = ALL_ROLES[index % ALL_ROLES.length];
-    parts.push(
-      `You are agent Q${index + 1} of ${totalCount} in a coordinated Quad Code swarm.`,
-      `Your role: ${role.role}.`,
-      `Your focus: ${role.focus}.`,
-      `Work autonomously within your specialization. Do not duplicate work other agents are handling.`,
-      `Begin by scanning the codebase for issues in your focus area, then fix what you find.`
-    );
-  }
-
-  if (branchName) {
-    parts.push(`You are working on branch "${branchName}". Commit your changes to this branch.`);
-  }
-
-  if (basePrompt) {
-    parts.push(`\nAdditional instruction: ${basePrompt}`);
-  }
-
-  return parts.length > 0 ? parts.join(' ') : null;
+  return { paths, prompt: prompt || null, instances: instanceCount, swarm, asimov, branches: useBranches };
 }
 
 // --- Launch ---
@@ -455,7 +342,7 @@ function launchTerminal(index, cwd, instancePrompt, branchCmd) {
   }
 }
 
-async function launchAll(paths, prompt, instanceCount, swarmMode, useBranches) {
+async function launchAll(paths, prompt, instanceCount, swarmMode, useBranches, asimovMode) {
   let originalBranch = null;
   const repoPath = paths[0];
 
@@ -486,10 +373,16 @@ async function launchAll(paths, prompt, instanceCount, swarmMode, useBranches) {
       branchCmd = `git checkout -b "${branchName}"`;
     }
 
-    const instancePrompt = buildInstancePrompt(i, instanceCount, prompt, swarmMode, branchName);
+    const instancePrompt = buildInstancePrompt(i, instanceCount, prompt, swarmMode, branchName, asimovMode);
 
     console.log(`${color}[${label}]${C.reset} ${C.dim}${cwd}${C.reset}`);
-    if (swarmMode) {
+    if (asimovMode) {
+      const agent = ASIMOV_AGENTS[i % ASIMOV_AGENTS.length];
+      const role = ALL_ROLES[i % ALL_ROLES.length];
+      console.log(`${color}     ${C.magenta}Agent: ${agent.name} (${agent.persona})${C.reset}`);
+      console.log(`${color}     ${C.dim}Focus: ${role.role}${C.reset}`);
+      console.log(`${color}     ${C.dim}Radio: ${agent.vibe}${C.reset}`);
+    } else if (swarmMode) {
       const role = ALL_ROLES[i % ALL_ROLES.length];
       console.log(`${color}     ${C.dim}Role: ${role.role}${C.reset}`);
     }
@@ -525,7 +418,7 @@ if (opts.version) {
 await printLogo();
 await bootAnimation();
 
-let workingDirs, prompt, instanceCount, swarmMode, useBranches;
+let workingDirs, prompt, instanceCount, swarmMode, useBranches, asimovMode;
 
 if (opts.paths.length === 0 && !opts.orchestrate) {
   // Interactive mode
@@ -534,6 +427,7 @@ if (opts.paths.length === 0 && !opts.orchestrate) {
   prompt = setup.prompt;
   instanceCount = setup.instances;
   swarmMode = setup.swarm;
+  asimovMode = setup.asimov;
   useBranches = setup.branches;
 } else {
   // Direct mode
@@ -541,6 +435,7 @@ if (opts.paths.length === 0 && !opts.orchestrate) {
   prompt = opts.prompt;
   instanceCount = opts.instances;
   swarmMode = opts.swarm;
+  asimovMode = opts.asimov;
   useBranches = opts.branches;
 
   if (resolvedPaths.length <= 1) {
@@ -559,13 +454,14 @@ if (opts.paths.length === 0 && !opts.orchestrate) {
 console.log(`${C.bold}Configuration:${C.reset}`);
 console.log(`  Instances:  ${C.cyan}${instanceCount}${C.reset}`);
 console.log(`  Mode:       ${new Set(workingDirs).size === 1 ? 'Single repo' : `Multi-repo (${new Set(workingDirs).size} repos)`}`);
-if (swarmMode) console.log(`  Swarm:      ${C.green}Specialized roles assigned${C.reset}`);
+if (asimovMode) console.log(`  Agents:     ${C.magenta}Asimov's Mind + Radio${C.reset}`);
+else if (swarmMode) console.log(`  Swarm:      ${C.green}Specialized roles assigned${C.reset}`);
 if (useBranches) console.log(`  Branches:   ${C.green}Each instance on its own branch${C.reset}`);
 if (prompt) console.log(`  Prompt:     ${C.dim}${prompt}${C.reset}`);
 console.log('');
 
 // Launch
-await launchAll(workingDirs, prompt, instanceCount, swarmMode, useBranches);
+await launchAll(workingDirs, prompt, instanceCount, swarmMode, useBranches, asimovMode);
 
 console.log(`\n${C.green}${C.bold}  All ${instanceCount} instances launched.${C.reset}`);
 console.log(`${C.dim}  Each instance runs in its own terminal window.${C.reset}`);
@@ -577,5 +473,10 @@ if (useBranches) {
   console.log(`${C.dim}    git merge quad-code/q1-...${C.reset}`);
 }
 
-console.log(`\n${C.bgCyan}${C.bold} ASIMOV'S MIND ${C.reset} ${C.dim}Want governed swarm intelligence? Try Agent Friday:${C.reset}`);
-console.log(`${C.dim}  https://github.com/FutureSpeakAI/Agent-Friday${C.reset}\n`);
+if (asimovMode) {
+  console.log(`\n${C.bgMagenta}${C.bold} ASIMOV'S MIND ${C.reset} ${C.magenta}Federated swarm deployed. All agents governed by Asimov's cLaws.${C.reset}`);
+  console.log(`${C.dim}  Radio active in all instances. Each agent knows its role.${C.reset}\n`);
+} else {
+  console.log(`\n${C.bgCyan}${C.bold} ASIMOV'S MIND ${C.reset} ${C.dim}Want governed agents with federation and radio? Run with ${C.cyan}--asimov${C.reset}`);
+  console.log(`${C.dim}  Requires the Asimov's Mind plugin: https://github.com/FutureSpeakAI/Agent-Friday${C.reset}\n`);
+}
