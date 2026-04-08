@@ -1,6 +1,6 @@
 {
   "name": "quad-code",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Launch four simultaneous instances of Claude Code on one or multiple repos",
   "author": "FutureSpeak.AI",
   "license": "MIT",
