@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
 
@@ -150,7 +150,6 @@ function launchInTerminals(paths, prompt) {
       terminalCmd = null;
       for (const t of terminals) {
         try {
-          const { execSync } = await import('child_process');
           execSync(`which ${t}`, { stdio: 'ignore' });
           terminalCmd = t;
           break;
