@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
 import { spawn, execSync } from 'child_process';
-import { existsSync } from 'fs';
-import { resolve } from 'path';
+import { existsSync, mkdirSync } from 'fs';
+import { resolve, basename } from 'path';
+import { createInterface } from 'readline';
+import { tmpdir } from 'os';
 
 const INSTANCE_COUNT = 4;
 
@@ -37,14 +39,13 @@ ${COLORS.dim}  by FutureSpeak.AI${COLORS.reset}
 function printUsage() {
   console.log(`${COLORS.bold}Usage:${COLORS.reset}
 
-  ${COLORS.cyan}Single repo mode${COLORS.reset} (4 instances in one directory):
+  ${COLORS.cyan}Interactive mode${COLORS.reset} (guided setup):
+    quad-code
+
+  ${COLORS.cyan}Direct mode${COLORS.reset} (skip prompts):
     quad-code /path/to/repo
-
-  ${COLORS.cyan}Multi-repo mode${COLORS.reset} (one instance per repo):
     quad-code /path/to/repo1 /path/to/repo2 /path/to/repo3 /path/to/repo4
-
-  ${COLORS.cyan}Current directory${COLORS.reset} (4 instances here):
-    quad-code .
+    quad-code https://github.com/user/repo
 
   ${COLORS.bold}Options:${COLORS.reset}
     -p, --prompt <text>    Send an initial prompt to all instances
@@ -52,10 +53,11 @@ function printUsage() {
     -v, --version          Show version
 
   ${COLORS.bold}Examples:${COLORS.reset}
+    quad-code
     quad-code .
     quad-code ~/projects/my-app
     quad-code ~/proj/frontend ~/proj/backend ~/proj/api ~/proj/infra
-    quad-code . -p "Review the codebase for security issues"
+    quad-code https://github.com/user/repo -p "Review for security issues"
 `);
 }
 
@@ -79,52 +81,125 @@ function parseArgs(argv) {
   return result;
 }
 
-function validatePaths(paths) {
-  for (const p of paths) {
-    const resolved = resolve(p);
-    if (!existsSync(resolved)) {
-      console.error(`${COLORS.red}Error: Path does not exist: ${resolved}${COLORS.reset}`);
-      process.exit(1);
-    }
+// --- Interactive prompt helpers ---
+
+function createPrompt() {
+  return createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+}
+
+function ask(rl, question) {
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => resolve(answer.trim()));
+  });
+}
+
+function isGitHubUrl(str) {
+  return /^https?:\/\/(www\.)?github\.com\//.test(str) || /^git@github\.com:/.test(str);
+}
+
+function cloneRepo(url) {
+  // Extract repo name from URL
+  let repoName = basename(url).replace(/\.git$/, '');
+  const cloneDir = resolve(process.cwd(), repoName);
+
+  if (existsSync(cloneDir)) {
+    console.log(`${COLORS.dim}  Directory ${cloneDir} already exists, using it${COLORS.reset}`);
+    return cloneDir;
+  }
+
+  console.log(`${COLORS.cyan}  Cloning ${url}...${COLORS.reset}`);
+  try {
+    execSync(`git clone "${url}" "${cloneDir}"`, { stdio: 'pipe' });
+    console.log(`${COLORS.green}  Cloned to ${cloneDir}${COLORS.reset}`);
+    return cloneDir;
+  } catch (err) {
+    console.error(`${COLORS.red}  Failed to clone: ${err.message}${COLORS.reset}`);
+    process.exit(1);
   }
 }
 
-function launchInstance(index, cwd, prompt) {
-  const color = INSTANCE_COLORS[index];
-  const label = `[Q${index + 1}]`;
-  const resolvedCwd = resolve(cwd);
+function resolvePathOrUrl(input) {
+  if (isGitHubUrl(input)) {
+    return cloneRepo(input);
+  }
+  const resolved = resolve(input);
+  if (!existsSync(resolved)) {
+    console.error(`${COLORS.red}Error: Path does not exist: ${resolved}${COLORS.reset}`);
+    process.exit(1);
+  }
+  return resolved;
+}
 
-  console.log(`${color}${label}${COLORS.reset} Launching Claude Code in ${COLORS.dim}${resolvedCwd}${COLORS.reset}`);
+async function interactiveSetup() {
+  const rl = createPrompt();
 
-  const args = [];
-  if (prompt) {
-    args.push('-p', prompt);
+  console.log(`${COLORS.bold}Let's set up your four Claude Code instances.${COLORS.reset}\n`);
+
+  const mode = await ask(
+    rl,
+    `${COLORS.cyan}[1]${COLORS.reset} Single project (4 instances, one repo)\n${COLORS.cyan}[2]${COLORS.reset} Multiple projects (one instance per repo)\n\n${COLORS.bold}Choose mode (1 or 2): ${COLORS.reset}`
+  );
+
+  let paths = [];
+
+  if (mode === '1') {
+    console.log('');
+    const input = await ask(
+      rl,
+      `${COLORS.bold}Enter the project path or GitHub URL${COLORS.reset}\n${COLORS.dim}(or press Enter for current directory)${COLORS.reset}: `
+    );
+
+    const dir = input === '' ? process.cwd() : resolvePathOrUrl(input);
+    paths = [dir, dir, dir, dir];
+    console.log(`\n${COLORS.bold}Mode:${COLORS.reset} Single repo (4 instances in ${dir})\n`);
+  } else if (mode === '2') {
+    console.log(`\n${COLORS.dim}Enter up to 4 project paths or GitHub URLs (one per line).${COLORS.reset}`);
+    console.log(`${COLORS.dim}Press Enter on an empty line when done.${COLORS.reset}\n`);
+
+    for (let i = 0; i < INSTANCE_COUNT; i++) {
+      const color = INSTANCE_COLORS[i];
+      const input = await ask(rl, `${color}[Q${i + 1}]${COLORS.reset} Path or URL: `);
+
+      if (input === '') {
+        if (paths.length === 0) {
+          console.error(`${COLORS.red}Error: You must provide at least one path.${COLORS.reset}`);
+          process.exit(1);
+        }
+        break;
+      }
+
+      paths.push(resolvePathOrUrl(input));
+    }
+
+    // Pad remaining slots with the last path
+    while (paths.length < INSTANCE_COUNT) {
+      paths.push(paths[paths.length - 1]);
+    }
+
+    console.log(`\n${COLORS.bold}Mode:${COLORS.reset} Multi-repo (${new Set(paths).size} repos)\n`);
+  } else {
+    console.error(`${COLORS.red}Invalid choice. Please enter 1 or 2.${COLORS.reset}`);
+    rl.close();
+    process.exit(1);
   }
 
-  const child = spawn('claude', args, {
-    cwd: resolvedCwd,
-    stdio: 'inherit',
-    shell: true,
-    env: { ...process.env },
-  });
+  // Ask for optional prompt
+  const prompt = await ask(
+    rl,
+    `${COLORS.bold}Initial prompt for all instances${COLORS.reset} ${COLORS.dim}(optional, press Enter to skip)${COLORS.reset}: `
+  );
 
-  child.on('error', (err) => {
-    console.error(`${color}${label}${COLORS.reset} ${COLORS.red}Failed to launch: ${err.message}${COLORS.reset}`);
-    if (err.message.includes('ENOENT')) {
-      console.error(`${COLORS.dim}  Make sure Claude Code CLI is installed: npm install -g @anthropic-ai/claude-code${COLORS.reset}`);
-    }
-  });
-
-  child.on('exit', (code) => {
-    console.log(`${color}${label}${COLORS.reset} Instance exited with code ${code}`);
-  });
-
-  return child;
+  rl.close();
+  return { paths, prompt: prompt || null };
 }
+
+// --- Launch logic ---
 
 function launchInTerminals(paths, prompt) {
   const platform = process.platform;
-  const children = [];
 
   for (let i = 0; i < paths.length; i++) {
     const resolvedCwd = resolve(paths[i]);
@@ -181,11 +256,7 @@ function launchInTerminals(paths, prompt) {
     child.on('error', (err) => {
       console.error(`${color}[${label}]${COLORS.reset} ${COLORS.red}Failed: ${err.message}${COLORS.reset}`);
     });
-
-    children.push(child);
   }
-
-  return children;
 }
 
 // --- Main ---
@@ -205,39 +276,40 @@ if (opts.version) {
 
 printBanner();
 
-// Default to current directory if no paths given
-if (opts.paths.length === 0) {
-  opts.paths.push('.');
-}
-
-validatePaths(opts.paths);
-
-// Build the list of working directories for 4 instances
 let workingDirs;
+let prompt;
 
-if (opts.paths.length === 1) {
-  // Single repo mode: 4 instances in the same directory
-  const dir = opts.paths[0];
-  workingDirs = [dir, dir, dir, dir];
-  console.log(`${COLORS.bold}Mode:${COLORS.reset} Single repo (4 instances in ${resolve(dir)})\n`);
-} else if (opts.paths.length <= INSTANCE_COUNT) {
-  // Multi-repo mode: one instance per path, pad with last path if < 4
-  workingDirs = [...opts.paths];
-  while (workingDirs.length < INSTANCE_COUNT) {
-    workingDirs.push(opts.paths[opts.paths.length - 1]);
-  }
-  console.log(`${COLORS.bold}Mode:${COLORS.reset} Multi-repo (${opts.paths.length} repos)\n`);
+if (opts.paths.length === 0) {
+  // No args — run interactive mode
+  const setup = await interactiveSetup();
+  workingDirs = setup.paths;
+  prompt = setup.prompt;
 } else {
-  console.error(`${COLORS.red}Error: Maximum ${INSTANCE_COUNT} paths supported.${COLORS.reset}`);
-  process.exit(1);
+  // Direct mode — resolve paths/URLs from args
+  const resolvedPaths = opts.paths.map(resolvePathOrUrl);
+  prompt = opts.prompt;
+
+  if (resolvedPaths.length === 1) {
+    workingDirs = [resolvedPaths[0], resolvedPaths[0], resolvedPaths[0], resolvedPaths[0]];
+    console.log(`${COLORS.bold}Mode:${COLORS.reset} Single repo (4 instances in ${resolvedPaths[0]})\n`);
+  } else if (resolvedPaths.length <= INSTANCE_COUNT) {
+    workingDirs = [...resolvedPaths];
+    while (workingDirs.length < INSTANCE_COUNT) {
+      workingDirs.push(resolvedPaths[resolvedPaths.length - 1]);
+    }
+    console.log(`${COLORS.bold}Mode:${COLORS.reset} Multi-repo (${resolvedPaths.length} repos)\n`);
+  } else {
+    console.error(`${COLORS.red}Error: Maximum ${INSTANCE_COUNT} paths supported.${COLORS.reset}`);
+    process.exit(1);
+  }
 }
 
-if (opts.prompt) {
-  console.log(`${COLORS.bold}Prompt:${COLORS.reset} ${COLORS.dim}${opts.prompt}${COLORS.reset}\n`);
+if (prompt) {
+  console.log(`${COLORS.bold}Prompt:${COLORS.reset} ${COLORS.dim}${prompt}${COLORS.reset}\n`);
 }
 
 // Launch each instance in its own terminal window
-launchInTerminals(workingDirs, opts.prompt);
+launchInTerminals(workingDirs, prompt);
 
 console.log(`\n${COLORS.green}${COLORS.bold}All ${INSTANCE_COUNT} instances launched.${COLORS.reset}`);
 console.log(`${COLORS.dim}Each instance runs in its own terminal window.${COLORS.reset}\n`);
